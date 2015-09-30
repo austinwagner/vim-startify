@@ -12,10 +12,7 @@ let g:autoloaded_startify = 1
 " Init: values {{{1
 let s:numfiles       = get(g:, 'startify_files_number', 10)
 let s:show_special   = get(g:, 'startify_enable_special', 1)
-let s:delete_buffers = get(g:, 'startify_session_delete_buffers')
 let s:relative_path  = get(g:, 'startify_relative_path') ? ':.' : ':p:~'
-let s:session_dir    = resolve(expand(get(g:, 'startify_session_dir',
-      \ has('win32') ? '$HOME\vimfiles\session' : '~/.vim/session')))
 
 let s:skiplist = get(g:, 'startify_skiplist', [
       \ 'COMMIT_EDITMSG',
@@ -152,197 +149,17 @@ endfunction
 
 " Function: #session_load {{{1
 function! startify#session_load(...) abort
-  if !isdirectory(s:session_dir)
-    echomsg 'The session directory does not exist: '. s:session_dir
-    return
-  elseif empty(startify#session_list_as_string(''))
-    echomsg 'There are no sessions...'
-    return
-  endif
-  call inputsave()
-  let spath = s:session_dir . s:sep . (exists('a:1')
-        \ ? a:1
-        \ : input('Load this session: ', fnamemodify(v:this_session, ':t'), 'custom,startify#session_list_as_string'))
-        \ | redraw
-  call inputrestore()
-  if filereadable(spath)
-    if get(g:, 'startify_session_persistence')
-          \ && exists('v:this_session')
-          \ && filewritable(v:this_session)
-      call startify#session_write(fnameescape(v:this_session))
-    endif
-    call startify#session_delete_buffers()
-    execute 'source '. fnameescape(spath)
-  else
-    echo 'No such file: '. spath
-  endif
-endfunction
-
-" Function: #session_save {{{1
-function! startify#session_save(...) abort
-  if !isdirectory(s:session_dir)
-    if exists('*mkdir')
-      echo 'The session directory does not exist: '. s:session_dir .'. Create it?  [y/n]'
-      if (nr2char(getchar()) == 'y')
-        call mkdir(s:session_dir, 'p')
-      else
-        echo
-        return
-      endif
-    else
-      echo 'The session directory does not exist: '. s:session_dir
-      return
-    endif
-  endif
-
-  call inputsave()
-  let sname = exists('a:1')
-        \ ? a:1
-        \ : input('Save under this session name: ', fnamemodify(v:this_session, ':t'), 'custom,startify#session_list_as_string')
-        \ | redraw
-  call inputrestore()
-
-  if empty(sname)
-    echo 'You gave an empty name!'
-    return
-  endif
-
-  let spath = s:session_dir . s:sep . sname
-  if !filereadable(spath)
-    call startify#session_write(fnameescape(spath))
-    echo 'Session saved under: '. spath
-    return
-  endif
-
-  echo 'Session already exists. Overwrite?  [y/n]' | redraw
-  if nr2char(getchar()) == 'y'
-    call startify#session_write(fnameescape(spath))
-    echo 'Session saved under: '. spath
-  else
-    echo 'Did NOT save the session!'
-  endif
-endfunction
-
-" Function: #session_close {{{1
-function! startify#session_close() abort
-  if exists('v:this_session') && filewritable(v:this_session)
-    call startify#session_write(fnameescape(v:this_session))
-    let v:this_session = ''
-  endif
-  call startify#session_delete_buffers()
-  Startify
-endfunction
-
-" Function: #session_write {{{1
-function! startify#session_write(spath)
-  " if this function is called while being in the Startify buffer
-  " (by loading another session or running :SSave/:SLoad directly)
-  " switch back to the previous buffer before saving the session
-  if &filetype == 'startify'
-    let callingbuffer = bufnr('#')
-    if callingbuffer > 0
-      execute 'buffer' callingbuffer
-    endif
-  endif
-  " prevent saving already deleted buffers that were in the arglist
-  for arg in argv()
-    if !buflisted(arg)
-      execute 'silent! argdelete' fnameescape(arg)
-    endif
-  endfor
-
-  let ssop = &sessionoptions
-  set sessionoptions-=options
-  try
-    execute 'mksession!' a:spath
-  catch
-    echohl ErrorMsg
-    echomsg v:exception
-    echohl NONE
-    return
-  finally
-    let &sessionoptions = ssop
-  endtry
-
-  if exists('g:startify_session_remove_lines')
-        \ || exists('g:startify_session_savevars')
-        \ || exists('g:startify_session_savecmds')
-    execute 'split' a:spath
-
-    " remove lines from the session file
-    if exists('g:startify_session_remove_lines')
-      for pattern in g:startify_session_remove_lines
-        execute 'silent global/'. pattern .'/delete _'
-      endfor
-    endif
-
-    " put existing variables from savevars into session file
-    if exists('g:startify_session_savevars')
-      call append(line('$')-3, map(filter(copy(g:startify_session_savevars), 'exists(v:val)'), '"let ". v:val ." = ". strtrans(string(eval(v:val)))'))
-    endif
-
-    " put commands from savecmds into session file
-    if exists('g:startify_session_savecmds')
-      call append(line('$')-3, g:startify_session_savecmds)
-    endif
-
-    setlocal bufhidden=delete
-    silent update
-    silent hide
-  endif
-endfunction
-
-" Function: #session_delete {{{1
-function! startify#session_delete(...) abort
-  if !isdirectory(s:session_dir)
-    echo 'The session directory does not exist: '. s:session_dir
-    return
-  elseif empty(startify#session_list_as_string(''))
-    echo 'There are no sessions...'
-    return
-  endif
-
-  call inputsave()
-  let spath = s:session_dir . s:sep . (exists('a:1')
-        \ ? a:1
-        \ : input('Delete this session: ', fnamemodify(v:this_session, ':t'), 'custom,startify#session_list_as_string'))
-        \ | redraw
-  call inputrestore()
-
-  echo 'Really delete '. spath .'? [y/n]' | redraw
-  if (nr2char(getchar()) == 'y')
-    if delete(spath) == 0
-      echo 'Deleted session '. spath .'!'
-    else
-      echo 'Deletion failed!'
-    endif
-  else
-    echo 'Deletion aborted!'
-  endif
-endfunction
-
-" Function: #session_delete_buffers {{{1
-function! startify#session_delete_buffers() abort
-  if !s:delete_buffers
-    return
-  endif
-  let n = 1
-  while n <= bufnr('$')
-    if buflisted(n)
-      silent execute 'bdelete' n
-    endif
-    let n += 1
-  endwhile
+  call xolox#session#open_cmd(a:1, '', 'SessionOpen')
 endfunction
 
 " Function: #session_list {{{1
 function! startify#session_list(lead, ...) abort
-  return map(split(globpath(s:session_dir, '*'.a:lead.'*'), '\n'), 'fnamemodify(v:val, ":t")')
+  return xolox#session#complete_names(a:lead, 0, 0)
 endfunction
 
 " Function: #session_list_as_string {{{1
 function! startify#session_list_as_string(lead, ...) abort
-  return join(map(split(globpath(s:session_dir, '*'.a:lead.'*'), '\n'), 'fnamemodify(v:val, ":t")'), "\n")
+  return join(startify#session_list(a:lead), '\n')
 endfunction
 
 " Function: #debug {{{1
@@ -494,7 +311,7 @@ endfunction
 
 " Function: s:show_sessions {{{1
 function! s:show_sessions() abort
-  let sfiles = split(globpath(s:session_dir, '*'), '\n')
+  let sfiles = xolox#session#get_names(0)
   if empty(sfiles)
     if exists('s:last_message')
       unlet s:last_message
@@ -513,7 +330,7 @@ function! s:show_sessions() abort
     if has('win32')
       let fname = substitute(fname, '\[', '\[[]', 'g')
     endif
-    call s:register(line('$'), index, 'session', 'SLoad', fname)
+    call s:register(line('$'), index, 'session', 'StartifyInternalSessionLoad', fname)
     let s:entry_number += 1
   endfor
 
@@ -662,9 +479,7 @@ function! s:check_user_options() abort
   let session = path . s:sep .'Session.vim'
 
   " change to VCS root directory
-  if get(g:, 'startify_session_autoload') && filereadable(session)
-    execute 'source' session
-  elseif get(g:, 'startify_change_to_vcs_root')
+  if get(g:, 'startify_change_to_vcs_root')
     call s:cd_to_vcs_root(path)
   " change directory
   elseif get(g:, 'startify_change_to_dir', 1)

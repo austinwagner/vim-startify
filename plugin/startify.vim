@@ -38,16 +38,7 @@ function! s:genesis()
   autocmd! startify VimEnter
 endfunction
 
-function! s:extinction()
-  if exists('v:this_session') && filewritable(v:this_session)
-    call startify#session_write(fnameescape(v:this_session))
-  endif
-endfunction
-
-command! -nargs=? -bar -complete=customlist,startify#session_list SSave   call startify#session_save(<f-args>)
-command! -nargs=? -bar -complete=customlist,startify#session_list SLoad   call startify#session_load(<f-args>)
-command! -nargs=? -bar -complete=customlist,startify#session_list SDelete call startify#session_delete(<f-args>)
-command! -nargs=0 -bar SClose call startify#session_close()
+command! -nargs=? -bar -complete=customlist,startify#session_list StartifyInternalSessionLoad   call startify#session_load(<f-args>)
 command! -nargs=0 -bar Startify enew | call startify#insane_in_the_membrane()
 command! -nargs=0 -bar StartifyDebug call startify#debug()
 
